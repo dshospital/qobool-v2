@@ -1,27 +1,19 @@
 const { Client, LocalAuth } = require('whatsapp-web.js');
-const qrcode = require('qrcode'); // مكتبة الصور النقية
+const qrcode = require('qrcode');
 const axios = require('axios');
 const express = require('express');
 
 const app = express();
 const port = process.env.PORT || 3000;
 
+// رابط الـ Webhook الجديد
 const GAS_WEBHOOK_URL = 'https://script.google.com/macros/s/AKfycbzcJqIWyFDXOCTqmc9N2Jhkj6kBx_LQS2eAtdy4S_CvYxPKHZDQ6RCTVhrC5CmhWouEww/exec';
-const ALLOWED_GROUP_NAME = 'قبول';
 
-// متغير لحفظ واجهة الويب
-let webContent = '<h2>⏳ جاري تشغيل البوت وتوليد الـ QR... يرجى تحديث الصفحة بعد ثوانٍ.</h2>';
+let webContent = '<h2>⏳ جاري تشغيل البوت وتوليد الـ QR...</h2>';
 
 app.get('/', (req, res) => {
-    res.send(`
-        <div style="text-align: center; margin-top: 50px; font-family: tahoma;">
-            <h1>نظام قبول - مستشفى دار الشفاء</h1>
-            ${webContent}
-        </div>
-    `);
+    res.send(`<div style="text-align: center; margin-top: 50px; font-family: tahoma;"><h1>نظام قبول</h1>${webContent}</div>`);
 });
-
-// تشغيل الخادم متوافق مع Render
 app.listen(port, '0.0.0.0', () => console.log(`Web server running on port ${port}`));
 
 const client = new Client({
@@ -30,31 +22,33 @@ const client = new Client({
 });
 
 client.on('qr', async qr => {
-    console.log('تم إنشاء الكود! افتح الرابط لمسحه.');
-    try {
-        const qrDataUrl = await qrcode.toDataURL(qr);
-        webContent = `
-            <h3>امسح الكود التالي من واتساب المبيعات (الأجهزة المرتبطة)</h3>
-            <img src="${qrDataUrl}" style="width: 300px; height: 300px; border: 2px solid #ccc; padding: 10px; border-radius: 10px;" />
-            <p>قم بتحديث الصفحة إذا لم تمسح الكود خلال 20 ثانية.</p>
-        `;
-    } catch (err) {
-        console.error(err);
-    }
+    const qrDataUrl = await qrcode.toDataURL(qr);
+    webContent = `<h3>امسح الكود التالي من واتساب المبيعات (الأجهزة المرتبطة)</h3><img src="${qrDataUrl}" style="width: 300px; height: 300px;" />`;
 });
 
 client.on('ready', () => {
-    console.log(`✅ البوت يعمل بوضع التقييد لجروب: ${ALLOWED_GROUP_NAME}`);
-    webContent = '<h2 style="color: green;">✅ تم الربط بنجاح! البوت يعمل الآن 24/7.</h2><p>يمكنك إغلاق هذه الصفحة.</p>';
+    webContent = '<h2 style="color: green;">✅ تم الربط بنجاح! البوت جاهز.</h2>';
 });
 
-client.on('message', async msg => {
+// استخدمنا message_create ليلتقط رسائلك من أي جوال حتى لو جوال المبيعات نفسه
+client.on('message_create', async msg => {
     try {
-        if (msg.fromMe || msg.isStatus) return;
-        const chat = await msg.getChat();
-        if (!chat.isGroup || chat.name.trim() !== ALLOWED_GROUP_NAME) return;
+        if (msg.isStatus) return;
         
+        const chat = await msg.getChat();
+        if (!chat.isGroup) return;
+        
+        // مرونة في اسم الجروب: سيعمل إذا كان الاسم يحتوي على كلمة "قبول" بأي شكل
+        if (!chat.name.includes('قبول')) return;
+
         const text = msg.body.trim();
+
+        // 🟢 أمر فحص سريع للتأكد أن البوت يعمل دون الاعتماد على جوجل سكريبت
+        if (text === 'تجربة البوت') {
+            await msg.reply('🤖 أهلاً بك! البوت حي يرزق ويستمع للجروب بنجاح.');
+            return;
+        }
+
         if (!text.startsWith('قبول /') && !text.startsWith('قبول/')) return;
 
         await msg.reply('⏳ *تحت الإجراء...* جاري إصدار الخطاب.');
