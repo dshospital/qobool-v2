@@ -1,6 +1,3 @@
-// هذا السطر سيجبر السيرفر والمكتبات على التعرف على التشفير
-global.crypto = require('crypto');
-
 const { default: makeWASocket, useMultiFileAuthState, DisconnectReason } = require('@whiskeysockets/baileys');
 const qrcode = require('qrcode');
 const axios = require('axios');
@@ -21,15 +18,16 @@ app.get('/', (req, res) => {
 app.listen(port, '0.0.0.0', () => console.log(`[1] 🌐 خادم الويب يعمل بنجاح على بورت ${port}`));
 
 async function connectToWhatsApp() {
-    console.log('[2] 📁 جاري إنشاء ملفات الجلسة الخفيفة...');
-    const { state, saveCreds } = await useMultiFileAuthState('auth_info_baileys');
+    console.log('[2] 📁 جاري إنشاء ملفات الجلسة (نسخة نظيفة)...');
+    // غيرنا اسم المجلد هنا لتخطي الملفات التالفة القديمة
+    const { state, saveCreds } = await useMultiFileAuthState('qobool_session_fresh');
     
     console.log('[3] 🔄 جاري الاتصال بخوادم واتساب...');
     const sock = makeWASocket({
         auth: state,
         printQRInTerminal: false,
-        logger: pino({ level: 'error' }),
-        browser: ['Qobool Bot', 'Chrome', '1.0.0']
+        logger: pino({ level: 'silent' }), // إخفاء الأخطاء الداخلية
+        browser: ['Qobool', 'Chrome', '1.0.0']
     });
 
     sock.ev.on('creds.update', saveCreds);
@@ -54,14 +52,16 @@ async function connectToWhatsApp() {
 
         if (connection === 'close') {
             const shouldReconnect = lastDisconnect?.error?.output?.statusCode !== DisconnectReason.loggedOut;
-            console.log('[!] تم قطع الاتصال. إعادة المحاولة؟', shouldReconnect);
+            console.log('[!] تم قطع الاتصال. إعادة المحاولة بعد 3 ثوانٍ...');
+            
             if (shouldReconnect) {
-                connectToWhatsApp();
+                // وضعنا تأخير 3 ثوانٍ لفرملة السيرفر ومنع اللوب اللانهائي
+                setTimeout(connectToWhatsApp, 3000);
             } else {
                 console.log('⚠️ تم تسجيل الخروج يدوياً. يتم مسح الجلسة...');
-                fs.rmSync('./auth_info_baileys', { recursive: true, force: true });
+                fs.rmSync('./qobool_session_fresh', { recursive: true, force: true });
                 webContent = '<h2>⚠️ تم تسجيل الخروج. يرجى تحديث الصفحة لمسح كود جديد.</h2>';
-                connectToWhatsApp();
+                setTimeout(connectToWhatsApp, 3000);
             }
         } else if (connection === 'open') {
             console.log('[6] ✅ تم الربط بنجاح! البوت مستعد لاستقبال الرسائل.');
