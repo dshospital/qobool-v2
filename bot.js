@@ -9,22 +9,23 @@ const app = express();
 const port = process.env.PORT || 3000;
 const GAS_WEBHOOK_URL = 'https://script.google.com/macros/s/AKfycbzcJqIWyFDXOCTqmc9N2Jhkj6kBx_LQS2eAtdy4S_CvYxPKHZDQ6RCTVhrC5CmhWouEww/exec';
 
-let webContent = '<h2>⏳ جاري تشغيل البوت الخفيف وتوليد الـ QR... يرجى تحديث الصفحة بعد ثوانٍ.</h2>';
+let webContent = '<h2>⏳ جاري تشغيل البوت الخفيف... يرجى الانتظار 30 ثانية ثم تحديث الصفحة.</h2>';
 
 app.get('/', (req, res) => {
     res.send(`<div style="text-align: center; margin-top: 50px; font-family: tahoma;"><h1>نظام قبول - الإصدار السريع</h1>${webContent}</div>`);
 });
 
-app.listen(port, '0.0.0.0', () => console.log(`Web server running on port ${port}`));
+app.listen(port, '0.0.0.0', () => console.log(`[1] 🌐 خادم الويب يعمل بنجاح على بورت ${port}`));
 
 async function connectToWhatsApp() {
-    // إنشاء مجلد لحفظ الجلسة لكي لا يطلب الكود مراراً
+    console.log('[2] 📁 جاري إنشاء ملفات الجلسة الخفيفة...');
     const { state, saveCreds } = await useMultiFileAuthState('auth_info_baileys');
     
+    console.log('[3] 🔄 جاري الاتصال بخوادم واتساب...');
     const sock = makeWASocket({
         auth: state,
         printQRInTerminal: false,
-        logger: pino({ level: 'silent' }), // منع السجلات المزعجة
+        logger: pino({ level: 'error' }), // إظهار الأخطاء فقط لتجنب الزحمة
         browser: ['Qobool Bot', 'Chrome', '1.0.0']
     });
 
@@ -34,61 +35,60 @@ async function connectToWhatsApp() {
         const { connection, lastDisconnect, qr } = update;
         
         if (qr) {
-            console.log('تم توليد كود QR جديد.');
+            console.log('[4] 🟢 تم التقاط كود QR بنجاح! جاري تحويله لصورة...');
             try {
                 const qrDataUrl = await qrcode.toDataURL(qr);
                 webContent = `
-                    <h3>امسح الكود التالي من واتساب المبيعات (الأجهزة المرتبطة)</h3>
+                    <h3>امسح الكود التالي من واتساب المبيعات</h3>
                     <img src="${qrDataUrl}" style="width: 300px; height: 300px; border: 2px solid #ccc; padding: 10px; border-radius: 10px;" />
-                    <p>قم بتحديث الصفحة إذا لم تمسح الكود خلال 20 ثانية.</p>
+                    <p>لديك 20 ثانية فقط لمسح الكود قبل تجديده.</p>
                 `;
+                console.log('[5] 📸 صورة الـ QR جاهزة الآن! (قم بتحديث صفحة الموقع وافحص الكود)');
             } catch (err) {
-                console.error(err);
+                console.error('❌ خطأ في توليد الصورة:', err);
             }
         }
 
         if (connection === 'close') {
-            const shouldReconnect = lastDisconnect.error?.output?.statusCode !== DisconnectReason.loggedOut;
+            const shouldReconnect = lastDisconnect?.error?.output?.statusCode !== DisconnectReason.loggedOut;
+            console.log('[!] تم قطع الاتصال. إعادة المحاولة؟', shouldReconnect);
             if (shouldReconnect) {
                 connectToWhatsApp();
             } else {
-                // في حال تم تسجيل الخروج يدوياً، يتم مسح الجلسة القديمة
+                console.log('⚠️ تم تسجيل الخروج يدوياً. يتم مسح الجلسة...');
                 fs.rmSync('./auth_info_baileys', { recursive: true, force: true });
                 webContent = '<h2>⚠️ تم تسجيل الخروج. يرجى تحديث الصفحة لمسح كود جديد.</h2>';
                 connectToWhatsApp();
             }
         } else if (connection === 'open') {
-            console.log('✅ تم الربط بنجاح!');
-            webContent = '<h2 style="color: green;">✅ تم الربط بنجاح! البوت يعمل الآن باستقرار تام وبدون استهلاك للرامات.</h2>';
+            console.log('[6] ✅ تم الربط بنجاح! البوت مستعد لاستقبال الرسائل.');
+            webContent = '<h2 style="color: green;">✅ تم الربط بنجاح! البوت يعمل الآن باستقرار تام.</h2>';
         }
     });
 
     sock.ev.on('messages.upsert', async ({ messages }) => {
         const msg = messages[0];
-        if (!msg.message) return;
-        if (msg.key.remoteJid === 'status@broadcast') return; // تجاهل الحالات
+        if (!msg.message || msg.key.remoteJid === 'status@broadcast') return;
 
         const isGroup = msg.key.remoteJid.endsWith('@g.us');
-        if (!isGroup) return; // العمل في المجموعات فقط
+        if (!isGroup) return; 
 
-        // الحصول على النص بشكل دقيق (رسالة عادية أو رسالة مقتبسة)
         const text = msg.message.conversation || msg.message.extendedTextMessage?.text || "";
         if (!text) return;
 
         try {
-            // التحقق من اسم الجروب
             const groupMetadata = await sock.groupMetadata(msg.key.remoteJid);
             if (!groupMetadata.subject.includes('قبول')) return;
 
-            // أمر الاختبار السريع
             if (text.trim() === 'تجربة البوت') {
-                await sock.sendMessage(msg.key.remoteJid, { text: '🤖 أهلاً بك! البوت يعمل الآن بكفاءة على الإصدار الخفيف.' }, { quoted: msg });
+                console.log('🤖 تم استلام أمر التجربة، جاري الرد...');
+                await sock.sendMessage(msg.key.remoteJid, { text: '🤖 أهلاً بك! البوت يعمل الآن بكفاءة وسرعة على الإصدار الخفيف.' }, { quoted: msg });
                 return;
             }
 
-            // التحقق من صيغة القبول
             if (!text.startsWith('قبول /') && !text.startsWith('قبول/')) return;
 
+            console.log('📩 تم استلام طلب خطاب، جاري المعالجة...');
             await sock.sendMessage(msg.key.remoteJid, { text: '⏳ *تحت الإجراء...* جاري إصدار الخطاب.' }, { quoted: msg });
 
             const senderPhone = msg.key.participant || msg.key.remoteJid;
@@ -97,11 +97,12 @@ async function connectToWhatsApp() {
 
             if (result.status === 'success') {
                 await sock.sendMessage(msg.key.remoteJid, { text: `✅ *تم اعتماد الخطاب!*\n🩺 الطبيب: ${result.doctor}\n📄 الرابط: ${result.pdf_url}` }, { quoted: msg });
+                console.log('✅ تم الإرسال بنجاح!');
             } else {
                 await sock.sendMessage(msg.key.remoteJid, { text: `❌ *تنبيه:* ${result.message}` }, { quoted: msg });
             }
         } catch (error) {
-            console.error(error.message);
+            console.error('🚨 خطأ:', error.message);
         }
     });
 }
