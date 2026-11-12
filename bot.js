@@ -1,32 +1,51 @@
 const { Client, LocalAuth } = require('whatsapp-web.js');
-const qrcode = require('qrcode-terminal');
+const qrcode = require('qrcode'); // مكتبة الصور النقية
 const axios = require('axios');
 const express = require('express');
 
 const app = express();
 const port = process.env.PORT || 3000;
 
-// ضع رابط الـ Webhook الخاص بجوجل سكريبت هنا
 const GAS_WEBHOOK_URL = 'https://script.google.com/macros/s/AKfycbzcJqIWyFDXOCTqmc9N2Jhkj6kBx_LQS2eAtdy4S_CvYxPKHZDQ6RCTVhrC5CmhWouEww/exec';
 const ALLOWED_GROUP_NAME = 'قبول';
 
-app.get('/', (req, res) => res.send('Bot is awake! 🤖'));
+// متغير لحفظ واجهة الويب
+let webContent = '<h2>⏳ جاري تشغيل البوت وتوليد الـ QR... يرجى تحديث الصفحة بعد ثوانٍ.</h2>';
+
+app.get('/', (req, res) => {
+    res.send(`
+        <div style="text-align: center; margin-top: 50px; font-family: tahoma;">
+            <h1>نظام قبول - دار الشفاء</h1>
+            ${webContent}
+        </div>
+    `);
+});
+
 app.listen(port, () => console.log(`Web server running on port ${port}`));
 
 const client = new Client({
     authStrategy: new LocalAuth(),
-    puppeteer: { 
-        args: ['--no-sandbox', '--disable-setuid-sandbox'] 
-    }
+    puppeteer: { args: ['--no-sandbox', '--disable-setuid-sandbox'] }
 });
 
-client.on('qr', qr => {
-    qrcode.generate(qr, { small: true });
-    console.log('امسح كود الـ QR من جوال المبيعات');
+client.on('qr', async qr => {
+    console.log('تم إنشاء الكود! افتح الرابط لمسحه.');
+    try {
+        // تحويل الـ QR إلى صورة نقية وعرضها في الرابط
+        const qrDataUrl = await qrcode.toDataURL(qr);
+        webContent = `
+            <h3>امسح الكود التالي من واتساب المبيعات (الأجهزة المرتبطة)</h3>
+            <img src="${qrDataUrl}" style="width: 300px; height: 300px; border: 2px solid #ccc; padding: 10px; border-radius: 10px;" />
+            <p>لديك 20 ثانية لمسح الكود قبل أن يتغير.</p>
+        `;
+    } catch (err) {
+        console.error(err);
+    }
 });
 
 client.on('ready', () => {
     console.log(`✅ البوت يعمل بوضع التقييد لجروب: ${ALLOWED_GROUP_NAME}`);
+    webContent = '<h2 style="color: green;">✅ تم الربط بنجاح! البوت يعمل الآن 24/7.</h2><p>يمكنك إغلاق هذه الصفحة.</p>';
 });
 
 client.on('message', async msg => {
