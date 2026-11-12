@@ -1,4 +1,6 @@
-const crypto = require('crypto');
+// هذا السطر سيجبر السيرفر والمكتبات على التعرف على التشفير
+global.crypto = require('crypto');
+
 const { default: makeWASocket, useMultiFileAuthState, DisconnectReason } = require('@whiskeysockets/baileys');
 const qrcode = require('qrcode');
 const axios = require('axios');
@@ -26,7 +28,7 @@ async function connectToWhatsApp() {
     const sock = makeWASocket({
         auth: state,
         printQRInTerminal: false,
-        logger: pino({ level: 'error' }), // إظهار الأخطاء فقط لتجنب الزحمة
+        logger: pino({ level: 'error' }),
         browser: ['Qobool Bot', 'Chrome', '1.0.0']
     });
 
