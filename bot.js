@@ -15,28 +15,28 @@ let webContent = '<h2>⏳ جاري تشغيل البوت وتوليد الـ QR.
 app.get('/', (req, res) => {
     res.send(`
         <div style="text-align: center; margin-top: 50px; font-family: tahoma;">
-            <h1>نظام قبول - دار الشفاء</h1>
+            <h1>نظام قبول - مستشفى دار الشفاء</h1>
             ${webContent}
         </div>
     `);
 });
 
-app.listen(port, () => console.log(`Web server running on port ${port}`));
+// تشغيل الخادم متوافق مع Render
+app.listen(port, '0.0.0.0', () => console.log(`Web server running on port ${port}`));
 
 const client = new Client({
     authStrategy: new LocalAuth(),
-    puppeteer: { args: ['--no-sandbox', '--disable-setuid-sandbox'] }
+    puppeteer: { args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage'] }
 });
 
 client.on('qr', async qr => {
     console.log('تم إنشاء الكود! افتح الرابط لمسحه.');
     try {
-        // تحويل الـ QR إلى صورة نقية وعرضها في الرابط
         const qrDataUrl = await qrcode.toDataURL(qr);
         webContent = `
             <h3>امسح الكود التالي من واتساب المبيعات (الأجهزة المرتبطة)</h3>
             <img src="${qrDataUrl}" style="width: 300px; height: 300px; border: 2px solid #ccc; padding: 10px; border-radius: 10px;" />
-            <p>لديك 20 ثانية لمسح الكود قبل أن يتغير.</p>
+            <p>قم بتحديث الصفحة إذا لم تمسح الكود خلال 20 ثانية.</p>
         `;
     } catch (err) {
         console.error(err);
